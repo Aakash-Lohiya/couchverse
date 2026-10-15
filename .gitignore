@@ -6,8 +6,8 @@ client/node_modules/
 client/dist/
 extension/dist/
 
-# runtime data
-data/
+# runtime data (root-level only; server/data/catalog.json must stay tracked)
+/data/
 server/media/*.mp4
 server/media/*.webm
 
