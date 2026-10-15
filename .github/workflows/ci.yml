@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+      - name: Install
+        run: npm ci && npm --prefix client ci
+      - name: Build client and extension
+        run: npm run build
+        env:
+          SITE_ORIGIN: https://couchverse.onrender.com
+      - name: Fetch sample media
+        run: npm run fetch-samples
+      - name: Unit tests
+        run: npm test
+      - name: Server smoke test
+        run: |
+          PORT=4700 node server/index.js & echo $! > server.pid
+          for i in $(seq 1 20); do curl -fsS http://localhost:4700/api/health && break || sleep 1; done
+          curl -fsS http://localhost:4700/api/health
+          curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:4700/
+          kill $(cat server.pid)
