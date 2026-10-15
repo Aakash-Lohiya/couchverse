@@ -16,9 +16,9 @@ services:
       - key: SITE_ORIGIN
         value: https://couchverse.onrender.com   # change to your actual Render URL after the first deploy
       - key: ALLOW_DEV_LOGIN
-        value: "true"                            # set to "false" once GOOGLE_CLIENT_ID is configured
+        value: "false"                           # Google Sign-In is configured; flip to "true" to allow email dev accounts
       - key: GOOGLE_CLIENT_ID
-        sync: false                              # set in the dashboard (optional)
+        value: 679370494465-u5p86elg791g98al2kl63ol983kua936.apps.googleusercontent.com   # public OAuth web client id (Firebase project)
       - key: EXTENSION_STORE_URL
         sync: false
     # For persistent data on a paid plan, add a disk and set DB_PATH=/var/data/couchverse.sqlite:
