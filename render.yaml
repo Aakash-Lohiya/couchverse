@@ -1,0 +1,28 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# One web service runs the API, Socket.IO and serves the built client.
+services:
+  - type: web
+    name: couchverse
+    runtime: node
+    plan: free            # free: sleeps when idle and has no persistent disk (SQLite resets on deploy)
+    buildCommand: npm ci && npm --prefix client ci && npm run build && npm run fetch-samples
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SITE_ORIGIN
+        value: https://couchverse.onrender.com   # change to your actual Render URL after the first deploy
+      - key: ALLOW_DEV_LOGIN
+        value: "true"                            # set to "false" once GOOGLE_CLIENT_ID is configured
+      - key: GOOGLE_CLIENT_ID
+        sync: false                              # set in the dashboard (optional)
+      - key: EXTENSION_STORE_URL
+        sync: false
+    # For persistent data on a paid plan, add a disk and set DB_PATH=/var/data/couchverse.sqlite:
+    # disk:
+    #   name: data
+    #   mountPath: /var/data
+    #   sizeGB: 1

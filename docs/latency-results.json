@@ -1,0 +1,173 @@
+{
+  "when": "2026-10-15T00:24:47.627Z",
+  "server": "http://localhost:4000",
+  "users": 14,
+  "controls": 52,
+  "node": "v24.20.0",
+  "controlPropagationMs": {
+    "count": 638,
+    "p50": 1.5,
+    "p95": 4,
+    "p99": 4,
+    "max": 5,
+    "mean": 1.5862068965517242
+  },
+  "hostAckRttMs": {
+    "count": 42,
+    "p50": 2,
+    "p95": 2,
+    "p99": 2,
+    "max": 2,
+    "mean": 1.619047619047619
+  },
+  "steadyStateDriftMs": {
+    "count": 1107,
+    "p50": 44.76206140270733,
+    "p95": 134.95876286992825,
+    "p99": 150.16897424857234,
+    "max": 153.2112843140112,
+    "mean": 57.72874451166529
+  },
+  "stallRecoveryMs": {
+    "count": 13,
+    "p50": 35.84188191346129,
+    "p95": 458.6191821309835,
+    "p99": 458.6191821309835,
+    "max": 458.6191821309835,
+    "mean": 137.17569795730805
+  },
+  "lateJoinToSyncMs": {
+    "count": 2,
+    "p50": 32,
+    "p95": 33,
+    "p99": 33,
+    "max": 33,
+    "mean": 32.5
+  },
+  "reconnectToSyncMs": 208,
+  "concurrency": {
+    "distinctVersionsAfterBurst": 1,
+    "positionSpreadS": 0.001,
+    "finalExpectedPosition": 191.51
+  },
+  "perClient": [
+    {
+      "user": "Load 0",
+      "p50": 1,
+      "p95": 2.5,
+      "samples": 52,
+      "rtt": 1,
+      "hardSeeks": 42
+    },
+    {
+      "user": "Load 1",
+      "p50": 1,
+      "p95": 2,
+      "samples": 51,
+      "rtt": 1,
+      "hardSeeks": 42
+    },
+    {
+      "user": "Load 2",
+      "p50": 1,
+      "p95": 3.5,
+      "samples": 52,
+      "rtt": 0,
+      "hardSeeks": 42
+    },
+    {
+      "user": "Load 3",
+      "p50": 1,
+      "p95": 3,
+      "samples": 51,
+      "rtt": 0,
+      "hardSeeks": 42
+    },
+    {
+      "user": "Load 4",
+      "p50": 1,
+      "p95": 3,
+      "samples": 51,
+      "rtt": 0,
+      "hardSeeks": 42
+    },
+    {
+      "user": "Load 5",
+      "p50": 1,
+      "p95": 3,
+      "samples": 51,
+      "rtt": 0,
+      "hardSeeks": 42
+    },
+    {
+      "user": "Load 6",
+      "p50": 1,
+      "p95": 3,
+      "samples": 51,
+      "rtt": 1,
+      "hardSeeks": 42
+    },
+    {
+      "user": "Load 7",
+      "p50": 1.5,
+      "p95": 4,
+      "samples": 51,
+      "rtt": 1,
+      "hardSeeks": 42
+    },
+    {
+      "user": "Load 8",
+      "p50": 1.5,
+      "p95": 4,
+      "samples": 52,
+      "rtt": 1,
+      "hardSeeks": 42
+    },
+    {
+      "user": "Load 9",
+      "p50": 2,
+      "p95": 5,
+      "samples": 52,
+      "rtt": 1,
+      "hardSeeks": 42
+    },
+    {
+      "user": "Load 10",
+      "p50": 2,
+      "p95": 4,
+      "samples": 52,
+      "rtt": 1,
+      "hardSeeks": 42
+    },
+    {
+      "user": "Load 11",
+      "p50": 2,
+      "p95": 4,
+      "samples": 52,
+      "rtt": 1,
+      "hardSeeks": 42
+    },
+    {
+      "user": "Load 12",
+      "p50": 4,
+      "p95": 4,
+      "samples": 10,
+      "rtt": 0,
+      "hardSeeks": 12
+    },
+    {
+      "user": "Load 13",
+      "p50": 4,
+      "p95": 4,
+      "samples": 10,
+      "rtt": 0,
+      "hardSeeks": 12
+    }
+  ],
+  "pass": {
+    "propagationP95Under250": true,
+    "driftP95Under500": true,
+    "convergedAfterBurst": true,
+    "tenPlusUsers": true
+  }
+}

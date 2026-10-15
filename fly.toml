@@ -1,0 +1,31 @@
+# Fly.io config (alternative to Render): `fly launch --copy-config` then `fly deploy`.
+app = "couchverse"
+primary_region = "bom"   # Mumbai
+
+[build]
+  [build.args]
+    SITE_ORIGIN = "https://couchverse.fly.dev"
+
+[env]
+  PORT = "4000"
+  ALLOW_DEV_LOGIN = "true"
+  SITE_ORIGIN = "https://couchverse.fly.dev"
+  DB_PATH = "/app/data/couchverse.sqlite"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = false   # keep sockets alive
+  min_machines_running = 1
+
+[mounts]
+  source = "couchverse_data"
+  destination = "/app/data"
+
+[checks]
+  [checks.health]
+    type = "http"
+    port = 4000
+    path = "/api/health"
+    interval = "30s"
+    timeout = "5s"

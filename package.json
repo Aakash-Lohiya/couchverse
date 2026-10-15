@@ -1,0 +1,33 @@
+{
+  "name": "couchverse",
+  "version": "1.0.0",
+  "description": "CouchVerse - real-time watch party with synchronized playback, companion mode for OTT platforms, and shared movie discovery.",
+  "private": true,
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "node server/index.js",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build && npm run build:ext",
+    "build:ext": "node extension/build.js",
+    "start": "node server/index.js",
+    "loadtest": "node scripts/loadtest.js",
+    "fetch-samples": "node scripts/fetch-samples.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "fuse.js": "^7.1.0",
+    "google-auth-library": "^9.15.1",
+    "jsonwebtoken": "^9.0.2",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}

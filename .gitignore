@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+client/node_modules/
+
+# builds
+client/dist/
+extension/dist/
+
+# runtime data
+data/
+server/media/*.mp4
+server/media/*.webm
+
+# local config
+.env
+.env.*
+client/.env.local
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

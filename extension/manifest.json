@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "CouchVerse Companion",
+  "version": "1.0.0",
+  "description": "Watch Netflix, Prime Video, JioHotstar, ZEE5, SonyLIV, Apple TV+ and YouTube in sync with your CouchVerse room: shared play/pause/seek, chat, reactions and the people list, right over the OTT player.",
+  "permissions": ["storage"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "CouchVerse Companion" },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:5173/*", "http://127.0.0.1:5173/*", "http://localhost:4000/*", "http://127.0.0.1:4000/*", "http://*.local:5173/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.netflix.com/*",
+        "*://*.primevideo.com/*",
+        "*://*.hotstar.com/*",
+        "*://*.zee5.com/*",
+        "*://*.sonyliv.com/*",
+        "*://tv.apple.com/*",
+        "*://*.youtube.com/*",
+        "*://*.mxplayer.in/*",
+        "*://*.lionsgateplay.com/*"
+      ],
+      "js": ["companion.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["page-netflix.js"],
+      "matches": ["*://*.netflix.com/*"]
+    }
+  ]
+}
