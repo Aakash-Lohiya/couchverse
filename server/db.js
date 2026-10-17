@@ -100,8 +100,29 @@ export async function initDb() {
     try {
       await db.execute(sql);
     } catch (e) {
-      throw new Error(`Database setup failed on "${sql.slice(0, 60)}…": ${e.message}`);
+      const detail = remoteUrl ? await describeRemoteError() : '';
+      throw new Error(`Database setup failed on "${sql.slice(0, 60)}…": ${e.message}${detail}`);
     }
+  }
+}
+
+/**
+ * The libsql client hides the server's error body ("Server returned HTTP
+ * status 400"). Ask the HTTP pipeline endpoint directly so the log shows the
+ * real reason (bad token, wrong database, unsupported statement...).
+ */
+async function describeRemoteError() {
+  try {
+    const base = remoteUrl.replace(/^(libsql|wss?):\/\//, 'https://').replace(/\/+$/, '');
+    const res = await fetch(`${base}/v2/pipeline`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.TURSO_AUTH_TOKEN || ''}` },
+      body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: 'SELECT 1' } }, { type: 'close' }] }),
+    });
+    const text = (await res.text()).slice(0, 400);
+    return `\n  Turso replied ${res.status} to a test query: ${text}\n  URL host: ${new URL(base).host}`;
+  } catch (e) {
+    return `\n  (could not reach Turso for diagnostics: ${e.message})`;
   }
 }
 
