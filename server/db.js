@@ -12,9 +12,19 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(here, '..', 'data');
 
-const remoteUrl = process.env.TURSO_DATABASE_URL;
+const remoteUrl = (process.env.TURSO_DATABASE_URL || '').trim();
 let url;
 if (remoteUrl) {
+  // Friendly diagnostics for the two mistakes that are easy to make in a dashboard.
+  if (/^eyJ[A-Za-z0-9_-]+\./.test(remoteUrl)) {
+    throw new Error('TURSO_DATABASE_URL contains a token (starts with "eyJ"). Put the libsql://...turso.io address in TURSO_DATABASE_URL and the token in TURSO_AUTH_TOKEN.');
+  }
+  if (!/^(libsql|https?|wss?):\/\//.test(remoteUrl)) {
+    throw new Error(`TURSO_DATABASE_URL must start with libsql:// (got "${remoteUrl.slice(0, 24)}…"). Copy the database URL from the Turso dashboard.`);
+  }
+  if (!process.env.TURSO_AUTH_TOKEN) {
+    throw new Error('TURSO_AUTH_TOKEN is empty. Create a token in the Turso dashboard and set it alongside TURSO_DATABASE_URL.');
+  }
   url = remoteUrl;
 } else {
   mkdirSync(dataDir, { recursive: true });
