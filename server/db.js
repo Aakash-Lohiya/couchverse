@@ -93,7 +93,16 @@ export async function initDb() {
       /* not supported on some backends */
     }
   }
-  await db.executeMultiple(SCHEMA);
+  // One statement per request: Turso's HTTP endpoint rejects some
+  // multi-statement scripts, and this works identically on the local file.
+  const statements = SCHEMA.split(';').map((s) => s.trim()).filter(Boolean);
+  for (const sql of statements) {
+    try {
+      await db.execute(sql);
+    } catch (e) {
+      throw new Error(`Database setup failed on "${sql.slice(0, 60)}…": ${e.message}`);
+    }
+  }
 }
 
 // ---------- helpers ----------
