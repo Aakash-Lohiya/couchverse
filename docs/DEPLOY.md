@@ -37,8 +37,25 @@ The repository is already initialised and committed locally (see the project roo
 7. Test with a friend: send them the room link. Each person needs their own account; the free plan handles a room of 10 comfortably.
 
 Notes on the free plan:
-- The service sleeps after 15 minutes without traffic and takes ~30 s to wake. Rooms in progress survive a wake-up (they are saved to SQLite) but the free plan has no persistent disk, so accounts and rooms are cleared on every **deploy**.
-- To keep data: upgrade to a paid instance, add a **Disk** mounted at `/var/data`, and set `DB_PATH=/var/data/couchverse.sqlite`.
+- The service sleeps after 15 minutes without traffic and takes ~30 s to wake.
+- The free plan has no persistent disk, so without a hosted database accounts, friends, preferences and rooms are cleared on every **deploy**. Do Part 2b once to fix that for free.
+
+## Part 2b - Keep accounts and friends across deploys (Turso, free)
+
+CouchVerse stores everything in a libSQL database. Pointing it at a free hosted Turso database makes logins, usernames, friends and preferences permanent.
+
+1. Go to https://turso.tech, sign up with GitHub (free plan, no card).
+2. In the dashboard click **Create Database**, name it `couchverse`, pick the region closest to your Render region (Singapore or Frankfurt for the free Render regions), and create it.
+3. Open the database page. Copy the **URL** (starts with `libsql://couchverse-...turso.io`).
+4. Click **Create Token** (or **Generate token**), choose no expiry, copy the token.
+5. In Render → **couchverse** service → **Environment**, add two variables and click **Save Changes**:
+   - `TURSO_DATABASE_URL` = the URL from step 3
+   - `TURSO_AUTH_TOKEN` = the token from step 4
+6. Render redeploys. Open `https://couchverse.onrender.com/api/health`: it should show `"db":"turso"`. Tables are created automatically on first start.
+
+From now on, deploying new versions keeps every account, username, friendship and setting. Sessions last 90 days, so people stay signed in on their devices too.
+
+Alternative without a hosted database: a paid Render instance with a **Disk** mounted at `/var/data` and `DB_PATH=/var/data/couchverse.sqlite`.
 
 ## Part 3 - Google Sign-In (optional, recommended for a public site)
 
@@ -58,6 +75,7 @@ Notes on the free plan:
 
 ## Checklist before sharing the link
 
+- [ ] `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are set (data survives deploys); `/api/health` shows `"db":"turso"`.
 - [ ] `SITE_ORIGIN` equals the live URL (extension bridge).
 - [ ] `JWT_SECRET` is set (Render generates one from the blueprint).
 - [ ] Google Sign-In configured, or you are fine with dev login for testers.

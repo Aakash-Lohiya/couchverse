@@ -2,12 +2,12 @@ import express from 'express';
 import cors from 'cors';
 import http from 'node:http';
 import path from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { Server } from 'socket.io';
 
-import { Users, Settings, Friends, FriendRequests, Notifications, publicUser } from './db.js';
+import { initDb, DB_BACKEND, Users, Settings, Friends, FriendRequests, Notifications, publicUser } from './db.js';
 import {
   requireAuth,
   verifyToken,
@@ -25,6 +25,10 @@ import { CHAT_POPUP_MODES, OTT_PLATFORMS } from '../shared/constants.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 4000);
 const CLIENT_DIST = path.join(here, '..', 'client', 'dist');
+const EXTENSION_STORE_URL = process.env.EXTENSION_STORE_URL || null;
+const EXTENSION_DIST = path.join(here, '..', 'extension', 'dist');
+
+await initDb();
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -43,13 +47,14 @@ const io = new Server(server, {
 });
 
 const rooms = new RoomManager(io);
+const restoredRooms = await rooms.restore();
 
 // ------------------------------------------------------------------
 // helpers
 // ------------------------------------------------------------------
-function notify(userId, type, payload) {
-  const n = Notifications.add(randomUUID(), userId, type, payload);
-  io.to(`user:${userId}`).emit('notification', { ...n, unread: Notifications.unreadCount(userId) });
+async function notify(userId, type, payload) {
+  const n = await Notifications.add(randomUUID(), userId, type, payload);
+  io.to(`user:${userId}`).emit('notification', { ...n, unread: await Notifications.unreadCount(userId) });
   return n;
 }
 
@@ -72,10 +77,7 @@ const wrap = (fn) => (req, res) =>
 // ------------------------------------------------------------------
 // config & auth
 // ------------------------------------------------------------------
-app.get('/api/health', (_req, res) => res.json({ ok: true, now: Date.now(), rooms: rooms.rooms.size }));
-
-const EXTENSION_STORE_URL = process.env.EXTENSION_STORE_URL || null;
-const EXTENSION_DIST = path.join(here, '..', 'extension', 'dist');
+app.get('/api/health', (_req, res) => res.json({ ok: true, now: Date.now(), rooms: rooms.rooms.size, db: DB_BACKEND }));
 
 app.get('/api/config', (_req, res) =>
   res.json({
@@ -90,11 +92,10 @@ app.get('/api/config', (_req, res) =>
 // Packaged companion extension for "load unpacked" installs. Built lazily and
 // cached until the dist folder changes.
 let extZipCache = null;
-app.get('/api/extension.zip', async (req, res) => {
+app.get('/api/extension.zip', async (_req, res) => {
   if (!existsSync(path.join(EXTENSION_DIST, 'manifest.json'))) {
     return res.status(404).json({ error: 'Extension is not built on this server. Run `npm run build:ext`.' });
   }
-  const { statSync } = await import('node:fs');
   const stamp = statSync(path.join(EXTENSION_DIST, 'companion.js')).mtimeMs;
   if (!extZipCache || extZipCache.stamp !== stamp) {
     const { zipDirectory } = await import('./zip.js');
@@ -110,138 +111,154 @@ app.post(
   '/api/auth/google',
   wrap(async (req, res) => {
     const identity = await verifyGoogleCredential(req.body.credential);
-    const { user } = upsertIdentity(identity);
+    const { user } = await upsertIdentity(identity);
     res.json(sessionPayload(user));
   }),
 );
 
 app.post(
   '/api/auth/dev',
-  wrap((req, res) => {
+  wrap(async (req, res) => {
     if (!ALLOW_DEV_LOGIN) return res.status(403).json({ error: 'dev login disabled' });
     const email = String(req.body.email || '').trim().toLowerCase();
     if (!email || !email.includes('@')) throw new Error('email required');
     const name = String(req.body.name || email.split('@')[0]).trim().slice(0, 40);
-    const { user } = upsertIdentity({ sub: `dev:${email}`, email, name, picture: null });
+    const { user } = await upsertIdentity({ sub: `dev:${email}`, email, name, picture: null });
     res.json(sessionPayload(user));
   }),
 );
 
-app.get('/api/me', requireAuth, (req, res) => {
-  res.json({
-    ...sessionPayload(req.user),
-    settings: Settings.get(req.user.id),
-    unread: Notifications.unreadCount(req.user.id),
-  });
-});
+app.get(
+  '/api/me',
+  requireAuth,
+  wrap(async (req, res) => {
+    res.json({
+      ...sessionPayload(req.user),
+      settings: await Settings.get(req.user.id),
+      unread: await Notifications.unreadCount(req.user.id),
+    });
+  }),
+);
 
-app.get('/api/username-available', (req, res) => {
-  const u = String(req.query.u || '').toLowerCase();
-  if (!USERNAME_RE.test(u)) return res.json({ available: false, reason: '3-20 chars: a-z, 0-9, underscore' });
-  res.json({ available: !Users.byUsername(u) });
-});
+app.get(
+  '/api/username-available',
+  wrap(async (req, res) => {
+    const u = String(req.query.u || '').toLowerCase();
+    if (!USERNAME_RE.test(u)) return res.json({ available: false, reason: '3-20 chars: a-z, 0-9, underscore' });
+    res.json({ available: !(await Users.byUsername(u)) });
+  }),
+);
 
 app.post(
   '/api/profile/setup',
   requireAuth,
-  wrap((req, res) => {
+  wrap(async (req, res) => {
     if (req.user.username) throw new Error('profile already set up');
     const username = String(req.body.username || '').toLowerCase();
     if (!USERNAME_RE.test(username)) throw new Error('username must be 3-20 chars: a-z, 0-9, underscore');
-    if (Users.byUsername(username)) throw new Error('username is taken');
+    if (await Users.byUsername(username)) throw new Error('username is taken');
     const displayName = String(req.body.displayName || '').trim().slice(0, 40);
     if (!displayName) throw new Error('display name required');
-    Users.setUsername(req.user.id, username, false);
-    Users.setDisplayName(req.user.id, displayName);
+    await Users.setUsername(req.user.id, username, false);
+    await Users.setDisplayName(req.user.id, displayName);
     const avatar = cleanAvatar(req.body.avatar);
-    if (avatar !== undefined) Users.setAvatar(req.user.id, avatar);
-    res.json(sessionPayload(Users.byId(req.user.id)));
+    if (avatar !== undefined) await Users.setAvatar(req.user.id, avatar);
+    res.json(sessionPayload(await Users.byId(req.user.id)));
   }),
 );
 
 app.patch(
   '/api/profile',
   requireAuth,
-  wrap((req, res) => {
+  wrap(async (req, res) => {
     const { displayName, avatar, username } = req.body;
     if (displayName !== undefined) {
       const d = String(displayName).trim().slice(0, 40);
       if (!d) throw new Error('display name cannot be empty');
-      Users.setDisplayName(req.user.id, d);
+      await Users.setDisplayName(req.user.id, d);
     }
     if (avatar !== undefined) {
       const a = cleanAvatar(avatar);
-      if (a !== undefined) Users.setAvatar(req.user.id, a);
+      if (a !== undefined) await Users.setAvatar(req.user.id, a);
     }
     if (username !== undefined) {
       const u = String(username).toLowerCase();
       if (u !== req.user.username) {
         if (req.user.username_changed) throw new Error('username can only be changed once');
         if (!USERNAME_RE.test(u)) throw new Error('username must be 3-20 chars: a-z, 0-9, underscore');
-        if (Users.byUsername(u)) throw new Error('username is taken');
-        Users.setUsername(req.user.id, u, true);
+        if (await Users.byUsername(u)) throw new Error('username is taken');
+        await Users.setUsername(req.user.id, u, true);
       }
     }
-    res.json(sessionPayload(Users.byId(req.user.id)));
+    res.json(sessionPayload(await Users.byId(req.user.id)));
   }),
 );
 
-app.get('/api/users/:username', requireAuth, (req, res) => {
-  const u = Users.byUsername(req.params.username);
-  if (!u) return res.status(404).json({ error: 'not found' });
-  res.json({ user: publicUser(u), isFriend: Friends.are(req.user.id, u.id) });
-});
+app.get(
+  '/api/users/:username',
+  requireAuth,
+  wrap(async (req, res) => {
+    const u = await Users.byUsername(req.params.username);
+    if (!u) return res.status(404).json({ error: 'not found' });
+    res.json({ user: publicUser(u), isFriend: await Friends.are(req.user.id, u.id) });
+  }),
+);
 
 // ------------------------------------------------------------------
 // settings
 // ------------------------------------------------------------------
-app.get('/api/settings', requireAuth, (req, res) => res.json(Settings.get(req.user.id)));
+app.get('/api/settings', requireAuth, wrap(async (req, res) => res.json(await Settings.get(req.user.id))));
 app.patch(
   '/api/settings',
   requireAuth,
-  wrap((req, res) => {
+  wrap(async (req, res) => {
     const { chatPopup, emojiPopup, autoFullscreen } = req.body;
     if (chatPopup !== undefined && !CHAT_POPUP_MODES.includes(chatPopup)) throw new Error('bad chatPopup');
     if (emojiPopup !== undefined && !CHAT_POPUP_MODES.includes(emojiPopup)) throw new Error('bad emojiPopup');
-    res.json(Settings.update(req.user.id, { chatPopup, emojiPopup, autoFullscreen }));
+    res.json(await Settings.update(req.user.id, { chatPopup, emojiPopup, autoFullscreen }));
   }),
 );
 
 // ------------------------------------------------------------------
 // friends & notifications
 // ------------------------------------------------------------------
-app.get('/api/friends', requireAuth, (req, res) => {
-  res.json({
-    friends: Friends.list(req.user.id).map((f) => ({ id: f.id, username: f.username, displayName: f.display_name, avatar: f.avatar, since: f.created_at })),
-    incoming: FriendRequests.incoming(req.user.id).map((r) => ({
-      id: r.id,
-      from: { id: r.from_user, username: r.username, displayName: r.display_name, avatar: r.avatar },
-      createdAt: r.created_at,
-    })),
-  });
-});
+app.get(
+  '/api/friends',
+  requireAuth,
+  wrap(async (req, res) => {
+    const [friends, incoming] = await Promise.all([Friends.list(req.user.id), FriendRequests.incoming(req.user.id)]);
+    res.json({
+      friends: friends.map((f) => ({ id: f.id, username: f.username, displayName: f.display_name, avatar: f.avatar, since: Number(f.created_at) })),
+      incoming: incoming.map((r) => ({
+        id: r.id,
+        from: { id: r.from_user, username: r.username, displayName: r.display_name, avatar: r.avatar },
+        createdAt: Number(r.created_at),
+      })),
+    });
+  }),
+);
 
 app.post(
   '/api/friends/request',
   requireAuth,
-  wrap((req, res) => {
-    const target = Users.byUsername(String(req.body.username || '').replace(/^@/, ''));
+  wrap(async (req, res) => {
+    const target = await Users.byUsername(String(req.body.username || '').replace(/^@/, ''));
     if (!target) throw new Error('no user with that username');
     if (target.id === req.user.id) throw new Error("you can't add yourself");
-    if (Friends.are(req.user.id, target.id)) throw new Error('already friends');
-    const pending = FriendRequests.pendingBetween(req.user.id, target.id);
+    if (await Friends.are(req.user.id, target.id)) throw new Error('already friends');
+    const pending = await FriendRequests.pendingBetween(req.user.id, target.id);
     if (pending) {
       if (pending.from_user === target.id) {
         // They already asked us: accept instead.
-        FriendRequests.resolve(pending.id, 'accepted');
-        Friends.add(req.user.id, target.id);
-        notify(target.id, 'friend_accepted', { user: publicUser(req.user) });
+        await FriendRequests.resolve(pending.id, 'accepted');
+        await Friends.add(req.user.id, target.id);
+        await notify(target.id, 'friend_accepted', { user: publicUser(req.user) });
         return res.json({ ok: true, accepted: true, friend: publicUser(target) });
       }
       throw new Error('request already pending');
     }
-    const r = FriendRequests.create(randomUUID(), req.user.id, target.id);
-    notify(target.id, 'friend_request', { requestId: r.id, user: publicUser(req.user) });
+    const r = await FriendRequests.create(randomUUID(), req.user.id, target.id);
+    await notify(target.id, 'friend_request', { requestId: r.id, user: publicUser(req.user) });
     res.json({ ok: true, request: { id: r.id, to: publicUser(target) } });
   }),
 );
@@ -249,42 +266,55 @@ app.post(
 app.post(
   '/api/friends/respond',
   requireAuth,
-  wrap((req, res) => {
-    const r = FriendRequests.byId(req.body.requestId);
+  wrap(async (req, res) => {
+    const r = await FriendRequests.byId(req.body.requestId);
     if (!r || r.to_user !== req.user.id || r.status !== 'pending') throw new Error('request not found');
     const accept = !!req.body.accept;
-    FriendRequests.resolve(r.id, accept ? 'accepted' : 'declined');
-    if (accept) Friends.add(r.from_user, r.to_user);
-    notify(r.from_user, accept ? 'friend_accepted' : 'friend_declined', { user: publicUser(req.user) });
-    // Clear the request notification on our side by marking a resolution record.
-    notify(req.user.id, accept ? 'friend_you_accepted' : 'friend_you_declined', { user: publicUser(Users.byId(r.from_user)), requestId: r.id });
+    await FriendRequests.resolve(r.id, accept ? 'accepted' : 'declined');
+    if (accept) await Friends.add(r.from_user, r.to_user);
+    await notify(r.from_user, accept ? 'friend_accepted' : 'friend_declined', { user: publicUser(req.user) });
+    await notify(req.user.id, accept ? 'friend_you_accepted' : 'friend_you_declined', { user: publicUser(await Users.byId(r.from_user)), requestId: r.id });
     res.json({ ok: true });
   }),
 );
 
-app.delete('/api/friends/:userId', requireAuth, (req, res) => {
-  Friends.remove(req.user.id, req.params.userId);
-  io.to(`user:${req.params.userId}`).emit('friends:changed');
-  io.to(`user:${req.user.id}`).emit('friends:changed');
-  res.json({ ok: true });
-});
+app.delete(
+  '/api/friends/:userId',
+  requireAuth,
+  wrap(async (req, res) => {
+    await Friends.remove(req.user.id, req.params.userId);
+    io.to(`user:${req.params.userId}`).emit('friends:changed');
+    io.to(`user:${req.user.id}`).emit('friends:changed');
+    res.json({ ok: true });
+  }),
+);
 
-app.get('/api/notifications', requireAuth, (req, res) => {
-  const list = Notifications.list(req.user.id);
-  // Mark friend-request notifications as resolved if the request is no longer pending.
-  const withStatus = list.map((n) => {
-    if (n.type === 'friend_request') {
-      const r = FriendRequests.byId(n.payload.requestId);
-      return { ...n, status: r ? r.status : 'gone' };
-    }
-    return n;
-  });
-  res.json({ notifications: withStatus, unread: Notifications.unreadCount(req.user.id) });
-});
-app.post('/api/notifications/read', requireAuth, (req, res) => {
-  Notifications.markRead(req.user.id);
-  res.json({ ok: true });
-});
+app.get(
+  '/api/notifications',
+  requireAuth,
+  wrap(async (req, res) => {
+    const list = await Notifications.list(req.user.id);
+    // Mark friend-request notifications as resolved if the request is no longer pending.
+    const withStatus = await Promise.all(
+      list.map(async (n) => {
+        if (n.type === 'friend_request') {
+          const r = await FriendRequests.byId(n.payload.requestId);
+          return { ...n, status: r ? r.status : 'gone' };
+        }
+        return n;
+      }),
+    );
+    res.json({ notifications: withStatus, unread: await Notifications.unreadCount(req.user.id) });
+  }),
+);
+app.post(
+  '/api/notifications/read',
+  requireAuth,
+  wrap(async (req, res) => {
+    await Notifications.markRead(req.user.id);
+    res.json({ ok: true });
+  }),
+);
 
 // ------------------------------------------------------------------
 // catalog
@@ -415,10 +445,10 @@ if (existsSync(CLIENT_DIST)) {
 // ------------------------------------------------------------------
 // sockets
 // ------------------------------------------------------------------
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
   const userId = token && verifyToken(token);
-  const user = userId && Users.byId(userId);
+  const user = userId && (await Users.byId(userId).catch(() => null));
   if (!user) return next(new Error('unauthorized'));
   socket.data.user = publicUser(user);
   socket.data.userId = user.id;
@@ -439,11 +469,11 @@ io.on('connection', (socket) => {
     return rid ? rooms.get(rid) : null;
   };
 
-  socket.on('room:join', ({ roomId, code, passcode } = {}, cb) => {
+  socket.on('room:join', async ({ roomId, code, passcode } = {}, cb) => {
     const reply = typeof cb === 'function' ? cb : () => {};
     const room = roomId ? rooms.get(roomId) : rooms.getByCode(code);
     if (!room) return reply({ error: 'room not found' });
-    const fresh = Users.byId(uid);
+    const fresh = await Users.byId(uid).catch(() => null);
     if (!fresh?.username) return reply({ error: 'finish your profile first' });
     const alreadyMember = room.members.has(uid);
     if (room.passcode && room.passcode !== passcode && !alreadyMember && uid !== room.creatorId) {
@@ -454,7 +484,7 @@ io.on('connection', (socket) => {
     socket.data.user = publicUser(fresh);
     const snapshot = rooms.join(socket, room, socket.data.user);
     snapshot.me = socket.data.user;
-    snapshot.friends = [...Friends.idSet(uid)];
+    snapshot.friends = [...(await Friends.idSet(uid).catch(() => new Set()))];
     reply({ ok: true, snapshot });
   });
 
@@ -574,6 +604,7 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, () => {
   console.log(`CouchVerse server listening on http://localhost:${PORT}`);
+  console.log(`  Database: ${DB_BACKEND}${process.env.TURSO_DATABASE_URL ? ` (${process.env.TURSO_DATABASE_URL.replace(/\/\/.*@/, '//')})` : ''}`);
   console.log(`  Google sign-in: ${GOOGLE_CLIENT_ID ? 'configured' : 'not configured'} | dev login: ${ALLOW_DEV_LOGIN ? 'enabled' : 'disabled'}`);
-  console.log(`  Rooms restored from disk: ${rooms.rooms.size}`);
+  console.log(`  Rooms restored from database: ${restoredRooms}`);
 });

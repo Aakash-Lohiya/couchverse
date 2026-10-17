@@ -138,9 +138,14 @@ export class RoomManager {
     this.byCode = new Map();
     this.socketRoom = new Map(); // socket.id -> roomId
     this.saveTimers = new Map();
-    for (const data of RoomStore.all()) this._register(new Room(data));
     setInterval(() => this._sweep(), 5000);
     setInterval(() => this._broadcastStats(), 1000);
+  }
+
+  /** Load rooms persisted by a previous process. Call once at boot. */
+  async restore() {
+    for (const data of await RoomStore.all()) this._register(new Room(data));
+    return this.rooms.size;
   }
 
   _register(room) {
@@ -176,7 +181,7 @@ export class RoomManager {
       room.id,
       setTimeout(() => {
         this.saveTimers.delete(room.id);
-        if (this.rooms.has(room.id)) RoomStore.save(room.id, room.toPersist());
+        if (this.rooms.has(room.id)) RoomStore.save(room.id, room.toPersist()).catch((e) => console.error("room save failed", e.message));
       }, 500),
     );
   }
@@ -194,7 +199,7 @@ export class RoomManager {
     this.io.to(room.id).emit('room:closed', { reason });
     this.rooms.delete(room.id);
     this.byCode.delete(room.code);
-    RoomStore.remove(room.id);
+    RoomStore.remove(room.id).catch(() => {});
   }
 
   // ---------- membership ----------

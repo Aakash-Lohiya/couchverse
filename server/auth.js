@@ -7,11 +7,12 @@ export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 export const ALLOW_DEV_LOGIN =
   process.env.ALLOW_DEV_LOGIN === 'true' || (!GOOGLE_CLIENT_ID && process.env.ALLOW_DEV_LOGIN !== 'false');
 const JWT_SECRET = process.env.JWT_SECRET || 'couchverse-dev-secret-change-me';
+const SESSION_DAYS = Number(process.env.SESSION_DAYS || 90);
 
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 export function signToken(user) {
-  return jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: '30d' });
+  return jwt.sign({ sub: user.id }, JWT_SECRET, { expiresIn: `${SESSION_DAYS}d` });
 }
 
 export function verifyToken(token) {
@@ -24,11 +25,11 @@ export function verifyToken(token) {
 }
 
 /** Express middleware: requires a Bearer token and loads req.user. */
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   const userId = token && verifyToken(token);
-  const user = userId && Users.byId(userId);
+  const user = userId && (await Users.byId(userId).catch(() => null));
   if (!user) return res.status(401).json({ error: 'unauthorized' });
   req.user = user;
   next();
@@ -43,14 +44,14 @@ export async function verifyGoogleCredential(credential) {
 }
 
 /** Find or create the user for an identity; returns { user, isNew }. */
-export function upsertIdentity({ sub, email, name, picture }) {
-  let user = Users.byGoogleSub(sub);
+export async function upsertIdentity({ sub, email, name, picture }) {
+  let user = await Users.byGoogleSub(sub);
   if (user) return { user, isNew: false };
   if (email) {
-    user = Users.byEmail(email);
+    user = await Users.byEmail(email);
     if (user) return { user, isNew: false };
   }
-  user = Users.create({ id: randomUUID(), googleSub: sub, email, displayName: name || 'New viewer', avatar: picture });
+  user = await Users.create({ id: randomUUID(), googleSub: sub, email, displayName: name || 'New viewer', avatar: picture });
   return { user, isNew: true };
 }
 

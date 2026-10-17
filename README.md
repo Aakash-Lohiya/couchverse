@@ -19,7 +19,7 @@ Real-time watch party. Everyone in a room sees the same frame at the same time, 
 4. In the room: the host's play, pause and seek drive everyone; viewers follow within half a second. Use the icons at the top for chat, people (with host transfer and per-person sync stats), the shared queue, polls and settings. Quick emojis and the emoji grid float over everyone's video.
 5. For OTT rooms, click **Get the extension** in the room lobby (or on your profile page). The site serves the packaged extension and walks you through the four-step install; after that, open the title on the OTT site and the CouchVerse overlay appears over the player.
 
-Hosting notes: the site runs on Render's free tier, so the first visit after 15 idle minutes takes about 30 seconds to wake, and accounts and rooms are reset whenever a new version is deployed.
+Hosting note: the site runs on Render's free tier, so the first visit after 15 idle minutes takes about 30 seconds to wake. Accounts, friends and preferences are stored in a hosted database and persist across deploys.
 
 ## Features
 
@@ -105,7 +105,8 @@ Production build: `npm run build` then `npm start` serves the built client from 
 | `JWT_SECRET` | dev value | signs session tokens; set in production |
 | `SITE_ORIGIN` | – | public site URL, baked into the extension at build time so its bridge runs on your domain |
 | `EXTENSION_STORE_URL` | – | Chrome Web Store URL; when set, the site offers "Add to Chrome" instead of the zip download |
-| `DB_PATH` | `data/couchverse.sqlite` | SQLite file |
+| `DB_PATH` | `data/couchverse.sqlite` | local SQLite file (ignored when Turso is configured) |
+| `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | – | hosted libSQL database (free at turso.tech) so accounts, friends and preferences survive deploys on hosts without a disk |
 | `VITE_SERVER_URL` (client) | same origin | API/socket origin when the client is hosted elsewhere |
 | `API_PORT` (client dev, in `client/.env.local`) | `4000` | where the Vite dev proxy forwards `/api`, `/media`, `/socket.io` |
 

@@ -21,6 +21,12 @@ services:
         value: 679370494465-u5p86elg791g98al2kl63ol983kua936.apps.googleusercontent.com   # public OAuth web client id (Firebase project)
       - key: EXTENSION_STORE_URL
         sync: false
+      # Persistent accounts/friends/preferences on the free plan: create a free
+      # database at https://turso.tech and set both values in the dashboard.
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
     # For persistent data on a paid plan, add a disk and set DB_PATH=/var/data/couchverse.sqlite:
     # disk:
     #   name: data
