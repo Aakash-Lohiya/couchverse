@@ -33,7 +33,22 @@ if (remoteUrl) {
 }
 export const DB_BACKEND = remoteUrl ? 'turso' : 'sqlite-file';
 
-export const db = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN || undefined });
+/**
+ * Pull the bare JWT out of the env var, tolerating labels, quotes and spaces
+ * that come along when a value is copied from a dashboard ("Token: eyJ...").
+ */
+function cleanToken(raw) {
+  if (!raw) return undefined;
+  const m = String(raw).match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
+  if (m) return m[0];
+  return String(raw).trim().replace(/^["']|["']$/g, '');
+}
+const authToken = remoteUrl ? cleanToken(process.env.TURSO_AUTH_TOKEN) : undefined;
+if (remoteUrl && authToken !== process.env.TURSO_AUTH_TOKEN) {
+  console.warn('TURSO_AUTH_TOKEN had extra characters around the token; using the embedded JWT. Please store only the token.');
+}
+
+export const db = createClient({ url, authToken });
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS users (
@@ -116,7 +131,7 @@ async function describeRemoteError() {
     const base = remoteUrl.replace(/^(libsql|wss?):\/\//, 'https://').replace(/\/+$/, '');
     const res = await fetch(`${base}/v2/pipeline`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${process.env.TURSO_AUTH_TOKEN || ''}` },
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${authToken || ''}` },
       body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: 'SELECT 1' } }, { type: 'close' }] }),
     });
     const text = (await res.text()).slice(0, 400);
